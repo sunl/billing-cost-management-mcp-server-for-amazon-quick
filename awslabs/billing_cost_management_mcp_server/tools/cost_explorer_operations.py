@@ -28,7 +28,7 @@ from ..utilities.aws_service_base import (
 from ..utilities.sql_utils import convert_api_response_to_table
 from datetime import datetime, timedelta
 from fastmcp import Context
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 
 async def get_cost_and_usage(
@@ -37,7 +37,7 @@ async def get_cost_and_usage(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     granularity: str = 'DAILY',
-    metrics: Optional[str] = None,
+    metrics: Optional[List[str]] = None,
     group_by: Optional[str] = None,
     filter_expr: Optional[str] = None,
     next_token: Optional[str] = None,
@@ -53,7 +53,7 @@ async def get_cost_and_usage(
         start_date: Start date in YYYY-MM-DD format
         end_date: End date in YYYY-MM-DD format (exclusive)
         granularity: Time granularity (DAILY, MONTHLY, HOURLY)
-        metrics: List of metrics as JSON string
+        metrics: List of metrics
         group_by: Optional grouping as JSON string
         filter_expr: Optional filters as JSON string
         next_token: Pagination token
@@ -70,13 +70,9 @@ async def get_cost_and_usage(
         await ctx.info(f'Using date range: {start} to {end}')
 
         # Parse JSON inputs
-        metrics_list = parse_json(metrics, 'metrics')
+        metrics_list = metrics if metrics else ['UnblendedCost']
         group_by_list = parse_json(group_by, 'group_by')
         filters = parse_json(filter_expr, 'filter')
-
-        # Set default metrics if not provided
-        if not metrics_list:
-            metrics_list = ['UnblendedCost']
 
         # Build request parameters
         request_params = {
@@ -149,7 +145,7 @@ async def get_cost_and_usage_with_resources(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     granularity: str = 'DAILY',
-    metrics: Optional[str] = None,
+    metrics: Optional[List[str]] = None,
     group_by: Optional[str] = None,
     filter_expr: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -163,7 +159,7 @@ async def get_cost_and_usage_with_resources(
         start_date: Start date in YYYY-MM-DD format (last 14 days max)
         end_date: End date in YYYY-MM-DD format (exclusive)
         granularity: Time granularity (DAILY, MONTHLY, HOURLY)
-        metrics: List of metrics as JSON string
+        metrics: List of metrics
         group_by: Optional grouping as JSON string
         filter_expr: Optional filters as JSON string
 
@@ -182,13 +178,9 @@ async def get_cost_and_usage_with_resources(
         await ctx.info(f'Using date range: {start} to {end}')
 
         # Parse JSON inputs
-        metrics_list = parse_json(metrics, 'metrics')
+        metrics_list = metrics if metrics else ['UnblendedCost']
         group_by_list = parse_json(group_by, 'group_by')
         filters = parse_json(filter_expr, 'filter')
-
-        # Set default metrics if not provided
-        if not metrics_list:
-            metrics_list = ['UnblendedCost']
 
         # Build request parameters
         request_params = {

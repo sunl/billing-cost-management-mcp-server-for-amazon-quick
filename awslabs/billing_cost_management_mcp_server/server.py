@@ -22,6 +22,13 @@ import asyncio
 import os
 import sys
 
+# 必须在 import 其他模块之前设置，避免容器内日志目录权限问题
+# logging_utils 在模块加载时会调用 configure_logging()
+# 如果不设置 FASTMCP_LOG_FILE，它会尝试在 site-packages/awslabs/logs 下创建日志文件
+# 容器内非 root 用户没有该目录的写权限
+os.environ.setdefault('FASTMCP_LOG_LEVEL', 'ERROR')
+os.environ.setdefault('FASTMCP_LOG_FILE', '/tmp/billing-mcp-server.log')
+
 
 if __name__ == '__main__':
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -202,8 +209,8 @@ def main():
     # Run the setup function to initialize the server
     asyncio.run(setup())
 
-    # Start the MCP server
-    mcp.run()
+    # Start the MCP server with streamable-http for AgentCore Runtime
+    mcp.run(transport='streamable-http', host='0.0.0.0', port=8000)
 
 
 if __name__ == '__main__':

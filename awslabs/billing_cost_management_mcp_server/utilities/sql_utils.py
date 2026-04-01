@@ -92,7 +92,12 @@ def get_session_db_path() -> str:
         session_dir = os.path.join(base_dir, 'sessions')
 
         # Create sessions directory if it doesn't exist
-        os.makedirs(session_dir, exist_ok=True)
+        try:
+            os.makedirs(session_dir, exist_ok=True)
+        except PermissionError:
+            # 容器内非 root 用户可能没有源码目录的写权限，fallback 到 /tmp
+            session_dir = os.path.join('/tmp', 'billing-mcp-sessions')
+            os.makedirs(session_dir, exist_ok=True)
 
         # Set the database path
         _SESSION_DB_PATH = os.path.join(session_dir, f'session_{session_id}.db')

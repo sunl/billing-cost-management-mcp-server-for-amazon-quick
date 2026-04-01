@@ -51,7 +51,11 @@ def get_server_directory() -> Path:
     """
     base_dir = Path(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     log_dir = base_dir / 'logs'
-    log_dir.mkdir(exist_ok=True)
+    try:
+        log_dir.mkdir(exist_ok=True)
+    except PermissionError:
+        # 容器内非 root 用户可能没有源码目录的写权限，fallback 到 /tmp
+        log_dir = Path('/tmp')
     return log_dir
 
 
