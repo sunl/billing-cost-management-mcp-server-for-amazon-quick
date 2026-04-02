@@ -344,8 +344,10 @@ export EXECUTION_ROLE_ARN=$(aws iam get-role --role-name BillingMCPServerAgentCo
 ### 步骤 9：创建 User Pool 和测试用户
 
 ```bash
+export POOL_NAME="<YOUR_POOL_NAME>"
+
 export POOL_ID=$(aws cognito-idp create-user-pool \
-  --pool-name "BillingMCPServerPool" \
+  --pool-name "${POOL_NAME}" \
   --policies '{"PasswordPolicy":{"MinimumLength":8}}' \
   --region ${AWS_REGION} | jq -r '.UserPool.Id')
 
@@ -356,8 +358,8 @@ export CLIENT_ID=$(aws cognito-idp create-user-pool-client \
   --explicit-auth-flows "ALLOW_USER_PASSWORD_AUTH" "ALLOW_REFRESH_TOKEN_AUTH" \
   --region ${AWS_REGION} | jq -r '.UserPoolClient.ClientId')
 
-export COGNITO_USERNAME="mcp-test-user"
-export COGNITO_PASSWORD="YourSecurePassword123!"
+export COGNITO_USERNAME="<YOUR_USERNAME>"
+export COGNITO_PASSWORD="<YOUR_SECURE_PASSWORD>"
 
 aws cognito-idp admin-create-user \
   --user-pool-id ${POOL_ID} --username ${COGNITO_USERNAME} \
@@ -418,23 +420,11 @@ echo "M2M Client ID: ${QS_M2M_CLIENT_ID}"
 echo "M2M Client Secret: ${QS_M2M_CLIENT_SECRET}"
 ```
 
-### 步骤 13：获取 Bearer Token（用于 CLI 测试）
-
-```bash
-export BEARER_TOKEN=$(aws cognito-idp initiate-auth \
-  --client-id "${CLIENT_ID}" \
-  --auth-flow USER_PASSWORD_AUTH \
-  --auth-parameters USERNAME=${COGNITO_USERNAME},PASSWORD=${COGNITO_PASSWORD} \
-  --region ${AWS_REGION} | jq -r '.AuthenticationResult.AccessToken')
-```
-
-> Token 有效期默认 1 小时，过期后重新执行上面的命令。
-
 ---
 
 ## 6. 配置并部署到 AgentCore Runtime
 
-### 步骤 14：运行 agentcore configure
+### 步骤 13：运行 agentcore configure
 
 ```bash
 agentcore configure -e awslabs/billing_cost_management_mcp_server/server.py --protocol MCP
@@ -445,68 +435,37 @@ agentcore configure -e awslabs/billing_cost_management_mcp_server/server.py --pr
 | 提示项 | 输入内容 | 说明 |
 |--------|----------|------|
 | Agent name | `billing_mcp_server` | AgentCore 中的 agent 标识名 |
+| Dependency file | 自动检测到 `requirements.txt`，直接回车确认 | 步骤 3 创建的依赖文件 |
 | Execution role ARN | 粘贴 `${EXECUTION_ROLE_ARN}` 的实际值 | 步骤 6 创建的 IAM 角色 ARN |
 | ECR repository | 直接回车（留空） | 工具会自动创建 ECR 仓库 |
-| Dependency file | 自动检测到 `requirements.txt`，直接回车确认 | 步骤 3 创建的依赖文件 |
-| Memory | 选择 `STM_ONLY` | 短期记忆模式，MCP Server 无需持久化 |
-| Enable OAuth | 输入 `yes` | 启用 JWT 认证 |
+| OAuth | 输入 `yes` | 启用 JWT 认证 |
 | Discovery URL | 粘贴 `${DISCOVERY_URL}` 的实际值 | 步骤 9 输出的 OpenID Connect 发现端点 |
-| Client ID | 粘贴 `${CLIENT_ID}` 的实际值 | 步骤 9 创建的 App Client ID |
-| Memory Configuration| 输入 `s` 跳过 | 
+| Client ID | 粘贴 `${CLIENT_ID}` 的实际值 | 步骤 9 创建的 App Client ID 和步骤12 创建的 M2M Client ID，以逗号分隔 |
+| Memory Configuration| 输入 `s` 跳过 | 暂时不在本文讨论范围内 |
 
-命令执行完成后，会在项目根目录生成 `.bedrock_agentcore.yaml` 文件，内容类似：
+命令执行完成后，会在项目根目录生成 `.bedrock_agentcore.yaml` 文件，会包含以下类似内容：
 
 ```yaml
-agent_name: billing_mcp_server
+default_agent: billing_mcp_server
+
 entry_point: awslabs/billing_cost_management_mcp_server/server.py
-protocol: MCP
-execution_role_arn: arn:aws:iam::123456789012:role/BillingMCPServerAgentCoreRole
-ecr_repository: ""
-dependency_file: requirements.txt
-memory_type: STM_ONLY
+execution_role: arn:aws:iam::123456789012:role/BillingMCPServerAgentCoreRole
+ecr_repository: 123456789012.dkr.ecr.us-east-1.amazonaws.com/bedrock-agentcore-billing_mcp_server
+protocol_configuration:
+  server_protocol: MCP
+
 authorizer_configuration:
   customJWTAuthorizer:
     discoveryUrl: https://cognito-idp.us-east-1.amazonaws.com/us-east-1_XXXXXXX/.well-known/openid-configuration
     allowedClients:
-    - abcdef1234567890  # 步骤 9 创建的 CLIENT_ID
+    - abcdef1234567890  # 步骤 9 创建的 CLIENT_ID，测试用
+    - 你的QS_M2M_CLIENT_ID实际值 # Quick Suite 使用的是步骤 12 创建的 M2M Client ID，必须加入列表，否则 Quick Suite 连接时会因为 token 的 `client_id` 不在允许列表中而被拒绝。
 ```
 
 > 如果 `agentcore configure` 因任何原因失败或需要重新配置，可以直接手动创建或编辑该文件。
 > 文件路径为项目根目录下的 `.bedrock_agentcore.yaml`。
 
-### 步骤 15：将 M2M Client ID 加入 allowedClients
-
-这是最容易遗漏也最关键的一步。`agentcore configure` 生成的配置文件中 `allowedClients` 只包含步骤 9 创建的测试用 Client ID。Quick Suite 使用的是步骤 12 创建的 M2M Client ID（`QS_M2M_CLIENT_ID`），必须手动加入列表，否则 Quick Suite 连接时会因为 token 的 `client_id` 不在允许列表中而被拒绝。
-
-编辑 `.bedrock_agentcore.yaml`，找到 `authorizer_configuration` 部分，将 `QS_M2M_CLIENT_ID` 添加到 `allowedClients` 列表中：
-
-```yaml
-# 修改前（只有测试用的 Client ID）：
-authorizer_configuration:
-  customJWTAuthorizer:
-    discoveryUrl: https://cognito-idp.us-east-1.amazonaws.com/us-east-1_XXXXXXX/.well-known/openid-configuration
-    allowedClients:
-    - abcdef1234567890
-
-# 修改后（加入 Quick Suite 的 M2M Client ID）：
-authorizer_configuration:
-  customJWTAuthorizer:
-    discoveryUrl: https://cognito-idp.us-east-1.amazonaws.com/us-east-1_XXXXXXX/.well-known/openid-configuration
-    allowedClients:
-    - abcdef1234567890
-    - 你的QS_M2M_CLIENT_ID实际值
-```
-
-也可以用命令行快速追加：
-
-```bash
-echo "    - ${QS_M2M_CLIENT_ID}" >> .bedrock_agentcore.yaml
-```
-
-> 如果不做这一步，Quick Suite 连接时会被拒绝，表现为 "Creation failed"，只能看到一个 `listTools` Action。
-> Cognito `client_credentials` 授权流程生成的 token 中包含 `client_id` claim，AgentCore Runtime 的 JWT authorizer 会验证这个 claim 是否在 `allowedClients` 列表中。
-
-### 步骤 16：部署
+### 步骤 14：部署
 
 ```bash
 agentcore launch
@@ -518,7 +477,7 @@ agentcore launch
 export AGENT_ARN="输出的ARN"
 ```
 
-### 步骤 17：验证部署
+### 步骤 15：验证部署
 
 ```bash
 # 刷新 token
@@ -554,8 +513,7 @@ curl -X POST "${MCP_ENDPOINT}" \
 ---
 
 ## 7. 接入 Amazon Quick Suite Chat Agent
-
-### 步骤 18：构造端点 URL 和认证信息
+### 步骤 16：构造端点 URL 和认证信息
 
 ```bash
 ENCODED_ARN=$(echo -n ${AGENT_ARN} | jq -sRr '@uri')
@@ -571,16 +529,14 @@ echo "Client Secret:   ${QS_M2M_CLIENT_SECRET}"
 echo "Token URL:       ${TOKEN_URL}"
 echo "========================================="
 ```
-
-### 步骤 19：在 Quick Suite 控制台创建 MCP Actions 集成
+### 步骤 17：在 Quick Suite 控制台创建 MCP Actions 集成
 
 1. 登录 [Amazon Quick Suite 控制台](https://quicksight.aws.amazon.com/)（需要 Author Pro 角色）
 2. 左侧导航栏 → Connections → Integrations → Actions 标签页
 3. 在 "Model Context Protocol" 卡片上点击 "+"
 4. 填写集成信息：
    - Name: 自定义名称
-   - Description: 描述 MCP Server 的能力（Quick Suite 会根据描述决定何时调用）
-   - MCP server endpoint: 步骤 18 输出的 `MCP_SERVER_ENDPOINT`
+   - MCP server endpoint: 步骤 16 输出的 `MCP_SERVER_ENDPOINT`
 5. 点击 "Next"
 6. 认证方式选择 "Service authentication"，填写：
    - Client ID: `${QS_M2M_CLIENT_ID}`
@@ -591,8 +547,7 @@ echo "========================================="
 9. 点击 "Next"，可选共享给其他用户，点击 "Done"
 
 > 注意：Service authentication 不需要 Authorization URL 和 Redirect URL，配置比 User Auth 更简单。
-
-### 步骤 20：在 Chat Agent 中使用
+### 步骤 18：在 Chat Agent 中使用
 
 在 Quick Suite 控制台打开 Chat Agents，选择 "My Assistant" 或自定义 Agent，输入自然语言提问：
 
