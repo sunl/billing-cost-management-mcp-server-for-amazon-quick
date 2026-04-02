@@ -93,7 +93,7 @@ def main():
     mcp.run(transport='streamable-http', host='0.0.0.0', port=8000)
 ```
 
-### 修改 4（可选但推荐）：`awslabs/billing_cost_management_mcp_server/tools/cost_explorer_tools.py`
+### 修改 4：`awslabs/billing_cost_management_mcp_server/tools/cost_explorer_tools.py`
 
 原始代码中 `metrics` 参数类型为 `Optional[str]`，需要传 JSON 数组字符串如 `'["UnblendedCost"]'`。Quick Suite 的 Action Review 界面对这种格式做类型校验时会报 "Validation failed for type"。
 
