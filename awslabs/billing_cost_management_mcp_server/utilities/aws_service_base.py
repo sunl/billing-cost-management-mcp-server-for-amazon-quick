@@ -40,6 +40,25 @@ from typing import Any, Dict, List, Optional, Tuple
 # Configure logger for this module
 logger = get_logger(__name__)
 
+# Module-level cache for local account ID
+_local_account_id: Optional[str] = None
+
+
+def _get_local_account_id(session) -> str:
+    """Get the local AWS account ID, cached after first call.
+
+    Args:
+        session: boto3 Session to use for the STS call
+
+    Returns:
+        The AWS account ID of the current session
+    """
+    global _local_account_id
+    if _local_account_id is None:
+        sts_client = session.client('sts')
+        _local_account_id = sts_client.get_caller_identity()['Account']
+    return _local_account_id
+
 
 # Version for user agent tracking
 __version__ = '1.0.0'
@@ -84,13 +103,15 @@ def get_pricing_region(requested_region: Optional[str] = None) -> str:
     return pricing_region
 
 
-def create_aws_client(service_name: str, region_name: Optional[str] = None) -> Any:
+def create_aws_client(service_name: str, region_name: Optional[str] = None, target_account_id: Optional[str] = None) -> Any:
     """Create and return an AWS service client with appropriate security constraints.
 
     Args:
         service_name: AWS service name (e.g., "ce", "pricing")
         region_name: AWS region name (e.g., "us-east-1"). If None, will use the
                      AWS_REGION environment variable or default to "us-east-1".
+        target_account_id: Optional AWS account ID for cross-account access.
+                          If provided, assumes a role in the target account.
 
     Returns:
         boto3.client: AWS service client with security constraints applied
@@ -127,6 +148,25 @@ def create_aws_client(service_name: str, region_name: Optional[str] = None) -> A
         session = boto3.Session(profile_name=profile_name, region_name=region)
     else:
         session = boto3.Session(region_name=region)
+
+    # Cross-account assume role
+    if target_account_id:
+        local_account_id = _get_local_account_id(session)
+        if target_account_id != local_account_id:
+            cross_account_role_name = os.environ.get('CROSS_ACCOUNT_ROLE_NAME', 'BillingMCPCrossAccountRole')
+            role_arn = f"arn:aws:iam::{target_account_id}:role/{cross_account_role_name}"
+            sts_client = session.client('sts', region_name=region)
+            assumed = sts_client.assume_role(
+                RoleArn=role_arn,
+                RoleSessionName=f'billing-mcp-{target_account_id}',
+            )
+            credentials = assumed['Credentials']
+            session = boto3.Session(
+                aws_access_key_id=credentials['AccessKeyId'],
+                aws_secret_access_key=credentials['SecretAccessKey'],
+                aws_session_token=credentials['SessionToken'],
+                region_name=region,
+            )
 
     # Configure the client with user agent and security settings
     config = Config(

@@ -71,6 +71,7 @@ async def compute_optimizer(
     filters: Optional[str] = None,
     account_ids: Optional[str] = None,
     next_token: Optional[str] = None,
+    target_account_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Retrieves recommendations from AWS Compute Optimizer.
 
@@ -93,7 +94,7 @@ async def compute_optimizer(
         await ctx_logger.info(f'Compute Optimizer operation: {operation}')
 
         # Initialize Compute Optimizer client using shared utility
-        co_client = create_aws_client('compute-optimizer', region_name='us-east-1')
+        co_client = create_aws_client('compute-optimizer', region_name='us-east-1', target_account_id=target_account_id)
 
         # Check enrollment status first to provide better error messages
         try:

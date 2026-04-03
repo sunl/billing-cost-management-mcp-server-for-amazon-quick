@@ -8,6 +8,8 @@
 
 本仓库基于 [awslabs/mcp](https://github.com/awslabs/mcp/tree/main/src/billing-cost-management-mcp-server) 上游源码，已完成 AgentCore Runtime 适配修改。修改详情参见 [source-modification-guide.md](./source-modification-guide.md)。
 
+本仓库支持跨账号查询账单数据，配置方法参见 [cross-account-design.md](./cross-account-design.md)。
+
 ### 1.2 架构
 
 ```
@@ -452,6 +454,7 @@ agentcore destroy
 
 - [billing-cost-management-mcp-server 上游源码](https://github.com/awslabs/mcp/tree/main/src/billing-cost-management-mcp-server)
 - [源码修改指南](./source-modification-guide.md)
+- [跨账号查询方案](./cross-account-design.md)
 - [FastMCP 文档](https://github.com/jlowin/fastmcp)
 - [Deploy MCP servers in AgentCore Runtime](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-mcp.html)
 - [MCP protocol contract](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-mcp-protocol-contract.html)

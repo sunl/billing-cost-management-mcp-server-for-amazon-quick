@@ -97,6 +97,7 @@ async def cost_comparison(
     filter: Optional[str] = None,
     max_results: Optional[int] = None,
     billing_view_arn: Optional[str] = None,
+    target_account_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Retrieves AWS cost comparison data using the Cost Explorer API.
 
@@ -120,7 +121,7 @@ async def cost_comparison(
         await ctx.info(f'Cost comparison operation: {operation}')
 
         # Initialize Cost Explorer client using shared utility
-        ce_client = create_aws_client('ce', region_name='us-east-1')
+        ce_client = create_aws_client('ce', region_name='us-east-1', target_account_id=target_account_id)
 
         if operation == 'getCostAndUsageComparisons':
             return await get_cost_and_usage_comparisons(

@@ -108,6 +108,7 @@ async def cost_optimization_hub(
     filters: Optional[str] = None,
     group_by: Optional[str] = None,
     include_all_recommendations: Optional[bool] = None,
+    target_account_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Retrieves recommendations from AWS Cost Optimization Hub.
 
@@ -133,7 +134,7 @@ async def cost_optimization_hub(
         await ctx.info(f'Cost Optimization Hub operation: {operation}')
 
         # Initialize Cost Optimization Hub client using shared utility
-        coh_client = create_aws_client('cost-optimization-hub', region_name='us-east-1')
+        coh_client = create_aws_client('cost-optimization-hub', region_name='us-east-1', target_account_id=target_account_id)
         await ctx.info('Created Cost Optimization Hub client in region us-east-1')
 
         # Validate operation-specific requirements

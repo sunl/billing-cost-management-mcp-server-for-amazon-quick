@@ -56,6 +56,7 @@ async def sp_performance(
     group_by: Optional[str] = None,
     filter: Optional[str] = None,
     max_results: Optional[int] = None,
+    target_account_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Tool that retrieves AWS Savings Plans coverage and utilization data.
 
@@ -77,7 +78,7 @@ async def sp_performance(
         await ctx.info(f'Savings Plans Coverage/Utilization operation: {operation}')
 
         # Initialize Cost Explorer client using shared utility
-        ce_client = create_aws_client('ce', region_name='us-east-1')
+        ce_client = create_aws_client('ce', region_name='us-east-1', target_account_id=target_account_id)
 
         if operation == 'get_savings_plans_coverage':
             return await get_savings_plans_coverage(

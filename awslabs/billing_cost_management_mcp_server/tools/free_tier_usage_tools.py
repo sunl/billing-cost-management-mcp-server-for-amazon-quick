@@ -51,6 +51,7 @@ async def free_tier_usage(
     operation: str = 'get_free_tier_usage',
     filter: Optional[str] = None,
     max_results: Optional[int] = None,
+    target_account_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Retrieves AWS Free Tier usage information using the Free Tier Usage API.
 
@@ -67,7 +68,7 @@ async def free_tier_usage(
         await ctx.info(f'Free Tier Usage operation: {operation}')
 
         # Initialize Free Tier client using shared utility
-        freetier_client = create_aws_client('freetier', region_name='us-east-1')
+        freetier_client = create_aws_client('freetier', region_name='us-east-1', target_account_id=target_account_id)
 
         if operation == 'get_free_tier_usage':
             return await get_free_tier_usage_data(ctx, freetier_client, filter, max_results)

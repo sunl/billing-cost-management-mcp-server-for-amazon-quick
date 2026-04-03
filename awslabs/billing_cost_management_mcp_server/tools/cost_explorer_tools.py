@@ -38,6 +38,80 @@ cost_explorer_server = FastMCP(
 )
 
 
+def _remove_redundant_linked_account_filter(filter_str: str, target_account_id: str) -> Optional[str]:
+    """Remove redundant LINKED_ACCOUNT filter when target_account_id is already specified.
+
+    Management/payer accounts do not appear in the LINKED_ACCOUNT dimension,
+    so filtering by LINKED_ACCOUNT with a management account ID returns empty results.
+    When target_account_id already scopes the query, such a filter is redundant and harmful.
+
+    Args:
+        filter_str: The filter JSON string
+        target_account_id: The target account ID already specified
+
+    Returns:
+        The cleaned filter string, or None if the entire filter was redundant
+    """
+    import json
+
+    try:
+        filter_obj = json.loads(filter_str)
+    except (json.JSONDecodeError, TypeError):
+        return filter_str
+
+    cleaned = _clean_linked_account_filter(filter_obj, target_account_id)
+    if cleaned is None:
+        return None
+    return json.dumps(cleaned)
+
+
+def _clean_linked_account_filter(filter_obj: dict, target_account_id: str):
+    """Recursively clean LINKED_ACCOUNT filter from a filter object.
+
+    Returns None if the entire filter should be removed, otherwise returns the cleaned filter.
+    """
+    if not isinstance(filter_obj, dict):
+        return filter_obj
+
+    # Direct LINKED_ACCOUNT dimension filter
+    if 'Dimensions' in filter_obj:
+        dim = filter_obj['Dimensions']
+        if (
+            isinstance(dim, dict)
+            and dim.get('Key') == 'LINKED_ACCOUNT'
+            and isinstance(dim.get('Values'), list)
+            and len(dim['Values']) == 1
+            and dim['Values'][0] == target_account_id
+        ):
+            return None
+
+    # Handle And/Or compound filters
+    for logical_op in ('And', 'Or'):
+        if logical_op in filter_obj:
+            conditions = filter_obj[logical_op]
+            if isinstance(conditions, list):
+                cleaned_conditions = []
+                for cond in conditions:
+                    cleaned = _clean_linked_account_filter(cond, target_account_id)
+                    if cleaned is not None:
+                        cleaned_conditions.append(cleaned)
+
+                if not cleaned_conditions:
+                    return None
+                if len(cleaned_conditions) == 1:
+                    return cleaned_conditions[0]
+                return {logical_op: cleaned_conditions}
+
+    # Handle Not filter
+    if 'Not' in filter_obj:
+        cleaned = _clean_linked_account_filter(filter_obj['Not'], target_account_id)
+        if cleaned is None:
+            return None
+        return {'Not': cleaned}
+
+    return filter_obj
+
+
 @cost_explorer_server.tool(
     name='cost-explorer',
     description="""Retrieves AWS cost and usage data using the Cost Explorer API.
@@ -48,6 +122,7 @@ IMPORTANT USAGE GUIDELINES:
 - Choose DAILY granularity for periods <3 months, MONTHLY for longer periods
 - Start with high-level dimensions (SERVICE, LINKED_ACCOUNT) before detailed ones
 - Always remember that the end_date is exclusive
+- When target_account_id is specified, DO NOT use LINKED_ACCOUNT dimension to filter the same account ID. target_account_id already scopes the query to that account. Adding a LINKED_ACCOUNT filter for the same account will return empty results if that account is a management/payer account, because management accounts do not appear in the LINKED_ACCOUNT dimension.
 
 USE THIS TOOL FOR:
 - **Historical cost trends** and spending analysis (any time period)
@@ -148,6 +223,7 @@ async def cost_explorer(
     prediction_interval_level: int = 80,
     tag_key: Optional[str] = None,
     cost_category_name: Optional[str] = None,
+    target_account_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Main entry point for Cost Explorer operations.
 
@@ -178,9 +254,13 @@ async def cost_explorer(
     """
     await ctx.info(f'Cost Explorer operation: {operation}')
 
+    # 方案三：防御性处理 - 当 target_account_id 已指定时，移除冗余的 LINKED_ACCOUNT filter
+    if target_account_id and filter:
+        filter = _remove_redundant_linked_account_filter(filter, target_account_id)
+
     # Create Cost Explorer client
     try:
-        ce_client = create_aws_client('ce')
+        ce_client = create_aws_client('ce', target_account_id=target_account_id)
     except Exception as client_error:
         await ctx.error(f'Failed to create AWS client: {str(client_error)}')
         return format_response(

@@ -48,6 +48,7 @@ async def budgets(
     budget_name: Optional[str] = None,
     max_results: int = 100,
     account_id: Optional[str] = None,
+    target_account_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Retrieves AWS budget information using the AWS Budgets API.
 
@@ -72,7 +73,7 @@ async def budgets(
         await ctx.info(f'Using AWS Account ID: {account_id}')
 
         # Call describe_budgets
-        return await describe_budgets(ctx, account_id, budget_name, max_results)
+        return await describe_budgets(ctx, account_id, budget_name, max_results, target_account_id)
 
     except Exception as e:
         # Use shared error handler for consistent error reporting
@@ -90,7 +91,7 @@ async def get_aws_account_id(ctx: Context) -> str:
     """
     try:
         # Create an STS client using shared utility
-        sts_client = create_aws_client('sts')
+        sts_client = create_aws_client('sts', target_account_id=target_account_id)
 
         await ctx.info('Retrieving AWS account ID from STS')
 
@@ -105,7 +106,7 @@ async def get_aws_account_id(ctx: Context) -> str:
 
 
 async def describe_budgets(
-    ctx: Context, account_id: str, budget_name: Optional[str], max_results: int
+    ctx: Context, account_id: str, budget_name: Optional[str], max_results: int, target_account_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """Retrieves budgets using the AWS Budgets API.
 
@@ -123,7 +124,7 @@ async def describe_budgets(
         request_params = {'AccountId': account_id, 'MaxResults': max_results}
 
         # Initialize Budgets client using shared utility
-        budgets_client = create_aws_client('budgets', region_name='us-east-1')
+        budgets_client = create_aws_client('budgets', region_name='us-east-1', target_account_id=target_account_id)
 
         # Collect all budgets with internal pagination
         all_budgets = []

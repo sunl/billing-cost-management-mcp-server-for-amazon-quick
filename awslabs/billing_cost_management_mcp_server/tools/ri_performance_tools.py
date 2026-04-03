@@ -73,6 +73,7 @@ async def ri_performance(
     filter: Optional[str] = None,
     sort_by: Optional[str] = None,
     max_results: Optional[int] = None,
+    target_account_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Retrieves AWS RI coverage and utilization data using the Cost Explorer API.
 
@@ -96,7 +97,7 @@ async def ri_performance(
         await ctx.info(f'Reservation Coverage/Utilization operation: {operation}')
 
         # Initialize Cost Explorer client using shared utility
-        ce_client = create_aws_client('ce', region_name='us-east-1')
+        ce_client = create_aws_client('ce', region_name='us-east-1', target_account_id=target_account_id)
 
         if operation == 'get_reservation_coverage':
             return await get_reservation_coverage(

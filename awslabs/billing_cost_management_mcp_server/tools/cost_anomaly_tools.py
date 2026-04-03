@@ -63,6 +63,7 @@ async def cost_anomaly(
     total_impact_operator: Optional[str] = None,
     total_impact_start: Optional[float] = None,
     total_impact_end: Optional[float] = None,
+    target_account_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Retrieves AWS cost anomalies using the Cost Explorer GetAnomalies API.
 
@@ -176,7 +177,7 @@ async def cost_anomaly(
         await ctx_logger.info(f'Retrieving cost anomalies from {start_date} to {end_date}')
 
         # Initialize Cost Explorer client using shared utility
-        ce_client = create_aws_client('ce', region_name='us-east-1')
+        ce_client = create_aws_client('ce', region_name='us-east-1', target_account_id=target_account_id)
 
         return await get_anomalies(
             ctx,

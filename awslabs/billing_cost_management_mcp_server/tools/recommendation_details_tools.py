@@ -68,7 +68,7 @@ When presenting the recommendation:
 4. Ensure all numeric values (costs, savings, metrics) are included
 5. Add natural language explanations to make the information more accessible""",
 )
-async def get_recommendation_details(ctx: Context, recommendation_id: str) -> Dict[str, Any]:
+async def get_recommendation_details(ctx: Context, recommendation_id: str, target_account_id: Optional[str] = None) -> Dict[str, Any]:
     """Get enhanced recommendation details with integrated data from multiple AWS services.
 
     Args:
@@ -82,11 +82,11 @@ async def get_recommendation_details(ctx: Context, recommendation_id: str) -> Di
         await ctx.info(f'Getting recommendation details for: {recommendation_id}')
 
         # Get base recommendation from Cost Optimization Hub using shared utility
-        coh_client = create_aws_client('cost-optimization-hub', region_name='us-east-1')
+        coh_client = create_aws_client('cost-optimization-hub', region_name='us-east-1', target_account_id=target_account_id)
         base_recommendation = coh_client.get_recommendation(recommendationId=recommendation_id)
 
         # Process the recommendation with additional data
-        response = await process_recommendation(ctx, base_recommendation)
+        response = await process_recommendation(ctx, base_recommendation, target_account_id)
 
         return format_response('success', response)
 
@@ -97,7 +97,7 @@ async def get_recommendation_details(ctx: Context, recommendation_id: str) -> Di
         )
 
 
-async def process_recommendation(ctx: Context, recommendation: Dict[str, Any]) -> Dict[str, Any]:
+async def process_recommendation(ctx: Context, recommendation: Dict[str, Any], target_account_id: Optional[str] = None) -> Dict[str, Any]:
     """Process a recommendation with additional data from appropriate services."""
     action_type = recommendation.get('actionType')
 
@@ -107,11 +107,11 @@ async def process_recommendation(ctx: Context, recommendation: Dict[str, Any]) -
     # Add additional data based on recommendation type
     if action_type in [ACTION_TYPE_PURCHASE_SAVINGS_PLAN, ACTION_TYPE_PURCHASE_RESERVED_INSTANCE]:
         # Get Cost Explorer data for Savings Plans or Reserved Instances
-        additional_data = await get_cost_explorer_data(ctx, recommendation)
+        additional_data = await get_cost_explorer_data(ctx, recommendation, target_account_id)
         result['additional_details'] = additional_data
     else:
         # Get Compute Optimizer data for other recommendation types
-        additional_data = await get_compute_optimizer_data(ctx, recommendation)
+        additional_data = await get_compute_optimizer_data(ctx, recommendation, target_account_id)
         result['additional_details'] = additional_data
 
     # Get the appropriate template
@@ -167,12 +167,12 @@ def format_base_recommendation(recommendation: Dict[str, Any]) -> Dict[str, Any]
     return formatted
 
 
-async def get_cost_explorer_data(ctx: Context, recommendation: Dict[str, Any]) -> Dict[str, Any]:
+async def get_cost_explorer_data(ctx: Context, recommendation: Dict[str, Any], target_account_id: Optional[str] = None) -> Dict[str, Any]:
     """Get additional data from Cost Explorer for Savings Plans or Reserved Instance recommendations."""
     action_type = recommendation.get('actionType')
 
     # Initialize Cost Explorer client using shared utility
-    ce_client = create_aws_client('ce')
+    ce_client = create_aws_client('ce', target_account_id=target_account_id)
 
     try:
         if action_type == ACTION_TYPE_PURCHASE_SAVINGS_PLAN:
@@ -319,7 +319,7 @@ async def get_reserved_instances_recommendation(
 
 
 async def get_compute_optimizer_data(
-    ctx: Context, recommendation: Dict[str, Any]
+    ctx: Context, recommendation: Dict[str, Any], target_account_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """Get additional data from Compute Optimizer for compute resource recommendations."""
     action_type = recommendation.get('actionType')
@@ -332,7 +332,7 @@ async def get_compute_optimizer_data(
 
     try:
         # Initialize Compute Optimizer client using shared utility
-        compute_optimizer = create_aws_client('compute-optimizer', region_name=region_name)
+        compute_optimizer = create_aws_client('compute-optimizer', region_name=region_name, target_account_id=target_account_id)
 
         # Handle Stop and Delete recommendations
         if action_type in [ACTION_TYPE_STOP, ACTION_TYPE_DELETE]:
