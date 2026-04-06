@@ -103,6 +103,10 @@ ce_client = create_aws_client('ce', target_account_id=target_account_id)
 
 ## 4. AWS 侧配置
 
+默认跨账号角色名为 `BillingMCPCrossAccountRole`，以下配置均使用此名称。如需自定义，将 4.1 和 4.2 中的角色名替换为你的自定义名称。
+
+并且在 AgentCore 部署的时候，需要在容器环境变量中设置 `CROSS_ACCOUNT_ROLE_NAME`
+
 ### 4.1 源账号（部署 MCP Server 的账号）
 
 给 `BillingMCPServerAgentCoreRole` 添加 assume role 权限, 将此策略追加到步骤 6 创建的角色上：
@@ -185,19 +189,7 @@ aws iam put-role-policy \
   --policy-document file://billing-mcp-policy.json
 ```
 
-## 5. AgentCore 环境变量配置
-
-如需自定义角色名，在容器环境变量中添加（可选）：
-
-```
-CROSS_ACCOUNT_ROLE_NAME=MyCustomRoleName
-```
-
-不设置则使用默认值 `BillingMCPCrossAccountRole`。
-
-> 具体如何在 AgentCore Runtime 中设置容器环境变量，需参考 AgentCore 文档确认配置方式。
-
-## 6. 用户体验示例
+## 5. 用户体验示例
 
 ```
 查看账号 111111111111 上个月的费用，按服务分组
@@ -213,7 +205,7 @@ CROSS_ACCOUNT_ROLE_NAME=MyCustomRoleName
 → LLM 调用 compute-optimizer，target_account_id=111111111111
 ```
 
-## 7. 不需要改动的工具
+## 6. 不需要改动的工具
 
 以下工具不涉及账号维度，不需要加 `target_account_id` 参数：
 
@@ -223,7 +215,7 @@ CROSS_ACCOUNT_ROLE_NAME=MyCustomRoleName
 - `bcm_pricing_calculator_tools.py` — BCM 定价计算器，查询的是定价模型而非账单数据
 - `storage_lens_tools.py` — S3 Storage Lens，通过 Athena 查询，场景较特殊
 
-## 8. 改动总结
+## 7. 改动总结
 
 | 类别 | 改动 |
 |------|------|

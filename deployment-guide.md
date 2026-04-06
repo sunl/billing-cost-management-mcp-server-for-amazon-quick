@@ -178,6 +178,7 @@ aws iam put-role-policy \
   --policy-document file://billing-mcp-policy.json
 
 export EXECUTION_ROLE_ARN=$(aws iam get-role --role-name BillingMCPServerAgentCoreRole --query 'Role.Arn' --output text)
+echo "Execution Role ARN: ${EXECUTION_ROLE_ARN}"
 ```
 
 ---
@@ -265,9 +266,97 @@ echo "M2M Client Secret: ${QS_M2M_CLIENT_SECRET}"
 
 ---
 
-## 6. 配置并部署到 AgentCore Runtime
+## 6. 跨账号查询配置（可选）
 
-### 步骤 11：运行 agentcore configure
+如需查询其他 AWS 账号的账单数据，需要配置跨账号 assume role。不需要跨账号查询可跳过本节。方案详情参见 [cross-account-design.md](./cross-account-design.md)。
+
+默认跨账号角色名为 `BillingMCPCrossAccountRole`，以下配置均使用此名称。如需自定义，将 6.1 和 6.2 中的角色名替换为你的自定义名称。
+
+并且在 AgentCore 部署的时候，需要在容器环境变量中设置 `CROSS_ACCOUNT_ROLE_NAME`
+
+### 步骤 11：配置源账号跨账号权限
+
+给 `BillingMCPServerAgentCoreRole` 添加 assume role 权限，将此策略追加到步骤 4 创建的角色上：
+
+```bash
+cat > cross-account-policy.json << EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Sid": "CrossAccountAssumeRole",
+    "Effect": "Allow",
+    "Action": "sts:AssumeRole",
+    "Resource": [
+      "arn:aws:iam::<目标账号A>:role/BillingMCPCrossAccountRole",
+      "arn:aws:iam::<目标账号B>:role/BillingMCPCrossAccountRole"
+    ]
+  }]
+}
+EOF
+
+aws iam put-role-policy \
+  --role-name BillingMCPServerAgentCoreRole \
+  --policy-name CrossAccountAssumeRolePolicy \
+  --policy-document file://cross-account-policy.json
+```
+
+### 步骤 12：配置目标账号角色
+
+创建统一命名的角色 `BillingMCPCrossAccountRole`：
+
+```bash
+# 在目标账号中执行
+
+cat > trust-policy.json << EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {
+      "AWS": "arn:aws:iam::<源账号ID>:role/BillingMCPServerAgentCoreRole"
+    },
+    "Action": "sts:AssumeRole"
+  }]
+}
+EOF
+
+aws iam create-role \
+  --role-name BillingMCPCrossAccountRole \
+  --assume-role-policy-document file://trust-policy.json \
+  --description "Cross-account role for Billing MCP Server"
+```
+
+权限策略（与步骤 6 中的 `billing-mcp-policy.json` 相同）：
+
+```bash
+# 在目标账号中执行
+
+cat > billing-mcp-policy.json << EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {"Sid": "CostExplorer", "Effect": "Allow", "Action": ["ce:GetCostAndUsage","ce:GetCostAndUsageWithResources","ce:GetCostAndUsageComparisons","ce:GetCostComparisonDrivers","ce:GetCostForecast","ce:GetUsageForecast","ce:GetDimensionValues","ce:GetTags","ce:GetCostCategories","ce:GetReservationPurchaseRecommendation","ce:GetReservationCoverage","ce:GetReservationUtilization","ce:GetSavingsPlansUtilization","ce:GetSavingsPlansCoverage","ce:GetSavingsPlansUtilizationDetails","ce:GetSavingsPlansPurchaseRecommendation","ce:GetAnomalies"], "Resource": "*"},
+    {"Sid": "CostOptimizationHub", "Effect": "Allow", "Action": ["cost-optimization-hub:GetRecommendation","cost-optimization-hub:ListRecommendations","cost-optimization-hub:ListRecommendationSummaries"], "Resource": "*"},
+    {"Sid": "ComputeOptimizer", "Effect": "Allow", "Action": ["compute-optimizer:GetAutoScalingGroupRecommendations","compute-optimizer:GetEBSVolumeRecommendations","compute-optimizer:GetEC2InstanceRecommendations","compute-optimizer:GetECSServiceRecommendations","compute-optimizer:GetRDSDatabaseRecommendations","compute-optimizer:GetLambdaFunctionRecommendations","compute-optimizer:GetEnrollmentStatus","compute-optimizer:GetIdleRecommendations"], "Resource": "*"},
+    {"Sid": "Budgets", "Effect": "Allow", "Action": ["budgets:ViewBudget"], "Resource": "*"},
+    {"Sid": "Pricing", "Effect": "Allow", "Action": ["pricing:DescribeServices","pricing:GetAttributeValues","pricing:GetProducts"], "Resource": "*"},
+    {"Sid": "FreeTier", "Effect": "Allow", "Action": ["freetier:GetFreeTierUsage"], "Resource": "*"},
+    {"Sid": "BCMPricingCalc", "Effect": "Allow", "Action": ["bcm-pricing-calculator:GetPreferences","bcm-pricing-calculator:GetWorkloadEstimate","bcm-pricing-calculator:ListWorkloadEstimateUsage","bcm-pricing-calculator:ListWorkloadEstimates"], "Resource": "*"}
+  ]
+}
+EOF
+
+aws iam put-role-policy \
+  --role-name BillingMCPCrossAccountRole \
+  --policy-name BillingMCPServerPolicy \
+  --policy-document file://billing-mcp-policy.json
+```
+
+---
+
+## 7. 配置并部署到 AgentCore Runtime
+
+### 步骤 13：运行 agentcore configure
 
 ```bash
 agentcore configure -e awslabs/billing_cost_management_mcp_server/server.py --protocol MCP
@@ -308,7 +397,7 @@ authorizer_configuration:
 > 如果 `agentcore configure` 因任何原因失败或需要重新配置，可以直接手动创建或编辑该文件。
 > 文件路径为项目根目录下的 `.bedrock_agentcore.yaml`。
 
-### 步骤 12：部署
+### 步骤 14：部署
 
 ```bash
 agentcore launch
@@ -320,7 +409,7 @@ agentcore launch
 export AGENT_ARN="输出的ARN"
 ```
 
-### 步骤 13：验证部署
+### 步骤 15：验证部署
 
 ```bash
 # 获取 Bearer Token
@@ -350,9 +439,9 @@ curl -X POST "${MCP_ENDPOINT}" \
 
 ---
 
-## 7. 接入 Amazon Quick Suite Chat Agent
+## 8. 接入 Amazon Quick Suite Chat Agent
 
-### 步骤 14：构造端点 URL 和认证信息
+### 步骤 16：构造端点 URL 和认证信息
 
 ```bash
 ENCODED_ARN=$(echo -n ${AGENT_ARN} | jq -sRr '@uri')
@@ -369,14 +458,14 @@ echo "Token URL:       ${TOKEN_URL}"
 echo "========================================="
 ```
 
-### 步骤 15：在 Quick Suite 控制台创建 MCP Actions 集成
+### 步骤 17：在 Quick Suite 控制台创建 MCP Actions 集成
 
 1. 登录 [Amazon Quick Suite 控制台](https://quicksight.aws.amazon.com/)（需要 Author Pro 角色）
 2. 左侧导航栏 → Connections → Integrations → Actions 标签页
 3. 在 "Model Context Protocol" 卡片上点击 "+"
 4. 填写集成信息：
    - Name: 自定义名称
-   - MCP server endpoint: 步骤 14 输出的 `MCP_SERVER_ENDPOINT`
+   - MCP server endpoint: 步骤 16 输出的 `MCP_SERVER_ENDPOINT`
 5. 点击 "Next"
 6. 认证方式选择 "Service authentication"，填写：
    - Client ID: `${QS_M2M_CLIENT_ID}`
@@ -388,7 +477,7 @@ echo "========================================="
 
 > 注意：Service authentication 不需要 Authorization URL 和 Redirect URL，配置比 User Auth 更简单。
 
-### 步骤 16：在 Chat Agent 中使用
+### 步骤 18：在 Chat Agent 中使用
 
 在 Quick Suite 控制台打开 Chat Agents，选择 "My Assistant" 或自定义 Agent，输入自然语言提问：
 
@@ -408,7 +497,7 @@ echo "========================================="
 
 ---
 
-## 8. 日常运维
+## 9. 日常运维
 
 ```bash
 # 查看日志
@@ -428,7 +517,7 @@ agentcore destroy
 
 ---
 
-## 9. 故障排查
+## 10. 故障排查
 
 | 问题 | 原因和解决方法 |
 |------|---------------|
@@ -450,7 +539,7 @@ agentcore destroy
 
 ---
 
-## 10. 参考文档
+## 11. 参考文档
 
 - [billing-cost-management-mcp-server 上游源码](https://github.com/awslabs/mcp/tree/main/src/billing-cost-management-mcp-server)
 - [源码修改指南](./source-modification-guide.md)

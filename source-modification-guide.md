@@ -217,3 +217,75 @@ diff -r /tmp/awslabs-mcp-update/src/billing-cost-management-mcp-server/awslabs \
 # 根据 diff 结果选择性合并（直接 cp -r 会覆盖本地修改）
 rm -rf /tmp/awslabs-mcp-update
 ```
+
+---
+
+## 5. 跨账号查询与管理账号兼容性修改
+
+### 修改 5：`awslabs/billing_cost_management_mcp_server/utilities/aws_service_base.py` — 本账号 ID 缓存与跳过 assume role
+
+当用户通过 `target_account_id` 查询 MCP 部署所在账号时，原始逻辑也会尝试 assume `BillingMCPCrossAccountRole`，但本账号不需要跨账号访问。
+
+新增模块级缓存 `_local_account_id` 和辅助函数 `_get_local_account_id()`，在 `create_aws_client` 中判断 `target_account_id` 是否等于本账号，如果是则跳过 assume role：
+
+```python
+# 模块级缓存
+_local_account_id: Optional[str] = None
+
+
+def _get_local_account_id(session) -> str:
+    """Get the local AWS account ID, cached after first call."""
+    global _local_account_id
+    if _local_account_id is None:
+        sts_client = session.client('sts')
+        _local_account_id = sts_client.get_caller_identity()['Account']
+    return _local_account_id
+```
+
+`create_aws_client` 中的 assume role 逻辑改为：
+
+```python
+    if target_account_id:
+        local_account_id = _get_local_account_id(session)
+        if target_account_id != local_account_id:
+            # 跨账号 assume role（原有逻辑）
+            ...
+```
+
+### 修改 6：`awslabs/billing_cost_management_mcp_server/tools/cost_explorer_tools.py` — 管理账号 LINKED_ACCOUNT 过滤防御
+
+LLM 在后续查询中可能自行添加 `LINKED_ACCOUNT` filter 来过滤已通过 `target_account_id` 指定的账号。如果该账号是管理账号/付款账号，`LINKED_ACCOUNT` 维度中不包含管理账号，会导致返回空结果。
+
+#### 6a. Prompt 引导
+
+在工具 description 的 `IMPORTANT USAGE GUIDELINES` 中新增：
+
+```
+- When target_account_id is specified, DO NOT use LINKED_ACCOUNT dimension to filter the same account ID.
+  target_account_id already scopes the query to that account. Adding a LINKED_ACCOUNT filter for the same
+  account will return empty results if that account is a management/payer account, because management accounts
+  do not appear in the LINKED_ACCOUNT dimension.
+```
+
+#### 6b. 代码防御
+
+新增辅助函数 `_remove_redundant_linked_account_filter()` 和 `_clean_linked_account_filter()`，在 `cost_explorer` 函数入口处检测并移除冗余的 `LINKED_ACCOUNT` filter：
+
+```python
+def _remove_redundant_linked_account_filter(filter_str: str, target_account_id: str) -> Optional[str]:
+    """Remove redundant LINKED_ACCOUNT filter when target_account_id is already specified."""
+    ...
+
+def _clean_linked_account_filter(filter_obj: dict, target_account_id: str):
+    """Recursively clean LINKED_ACCOUNT filter from a filter object."""
+    ...
+```
+
+在 `cost_explorer` 函数中调用：
+
+```python
+    if target_account_id and filter:
+        filter = _remove_redundant_linked_account_filter(filter, target_account_id)
+```
+
+支持直接 filter、`And`/`Or` 复合 filter 和 `Not` filter 的递归清理。如果整个 filter 都是冗余的则置为 `None`，如果复合 filter 中只剩一个条件则自动展平。
