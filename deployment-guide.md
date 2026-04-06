@@ -66,7 +66,7 @@ export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output tex
 ### 步骤 1：克隆源码
 
 ```bash
-git clone https://github.com/sunl/billing-cost-management-mcp-server-for-amazon-quick.git .
+git clone https://github.com/sunl/billing-cost-management-mcp-server-for-amazon-quick.git
 cd billing-cost-management-mcp-server-for-amazon-quick
 ```
 
