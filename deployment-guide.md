@@ -64,30 +64,16 @@ AWS Cost Explorer / Budgets / Compute Optimizer / ... 等 API
 
 ---
 
-## 2. 前置条件
+## 2. 前置条件与工具安装
+
+### 前置条件
 
 - Python 3.10+、git
-- Node.js 22+（新版 AgentCore CLI 以 npm 包形式分发）
-- [uv](https://github.com/astral-sh/uv#installation)（AgentCore CLI 使用 uv 管理 Python 项目依赖）
 - AWS CLI v2 已配置凭证
-- [AWS CDK](https://docs.aws.amazon.com/cdk/v2/guide/getting-started.html) 已安装（AgentCore CLI 使用 CDK 部署资源）
-- pip、jq 已安装
+- jq 已安装
 - Amazon Quick Enterprise 订阅，用户拥有 Author Pro 角色
 
-```bash
-# 验证 AWS 凭证是否已正确配置（如果报错说明凭证未配置或已过期，需先修复再继续）
-aws sts get-caller-identity
-
-export AWS_REGION=us-east-1
-export AWS_DEFAULT_REGION=us-east-1
-export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-```
-
----
-
-## 3. 安装工具并获取源码
-
-### 步骤 1：安装 AgentCore CLI 和 uv
+### 步骤 1：安装 Node.js、uv 和 AgentCore CLI
 
 > **注意**：AgentCore CLI 已从旧版 Python 包 `bedrock-agentcore-starter-toolkit` 迁移到新版 npm 包 `@aws/agentcore`。
 > 如果之前安装过旧版 CLI，请先卸载：`pip uninstall bedrock-agentcore-starter-toolkit`
@@ -152,7 +138,18 @@ curl -X POST http://localhost:8000/mcp \
 
 ---
 
-## 4. 配置 IAM 执行角色
+## 3. 配置 IAM 执行角色
+
+首先设置后续步骤需要的环境变量：
+
+```bash
+# 验证 AWS 凭证是否已正确配置（如果报错说明凭证未配置或已过期，需先修复再继续）
+aws sts get-caller-identity
+
+export AWS_REGION=us-east-1
+export AWS_DEFAULT_REGION=us-east-1
+export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+```
 
 ### 步骤 4：创建信任策略和角色
 
@@ -233,7 +230,7 @@ echo "Execution Role ARN: ${EXECUTION_ROLE_ARN}"
 
 ---
 
-## 5. 设置 Cognito 认证
+## 4. 设置 Cognito 认证
 
 ### 步骤 7：创建 User Pool 和测试用户
 
@@ -316,13 +313,11 @@ echo "M2M Client Secret: ${QS_M2M_CLIENT_SECRET}"
 
 ---
 
-## 6. 跨账号查询配置（可选）
+## 5. 跨账号查询配置（可选）
 
 如需查询其他 AWS 账号的账单数据，需要配置跨账号 assume role。不需要跨账号查询可跳过本节。方案详情参见 [cross-account-design.md](./cross-account-design.md)。
 
-默认跨账号角色名为 `BillingMCPCrossAccountRole`，以下配置均使用此名称。如需自定义，将 6.1 和 6.2 中的角色名替换为你的自定义名称。
-
-并且在 AgentCore 部署的时候，需要在容器环境变量中设置 `CROSS_ACCOUNT_ROLE_NAME`
+默认跨账号角色名为 `BillingMCPCrossAccountRole`，以下配置均使用此名称。如需自定义，将 6.1 和 6.2 中的角色名替换为你的自定义名称，并且在 AgentCore 部署的时候，需要在容器环境变量中设置 `CROSS_ACCOUNT_ROLE_NAME`
 
 ### 步骤 11：配置源账号跨账号权限
 
@@ -404,7 +399,7 @@ aws iam put-role-policy \
 
 ---
 
-## 7. 配置并部署到 AgentCore Runtime
+## 6. 配置并部署到 AgentCore Runtime
 
 > **注意**：新版 AgentCore CLI（`@aws/agentcore`）使用 `agentcore create` 创建项目、`agentcore deploy` 部署，取代了旧版的 `agentcore configure` + `agentcore launch` 工作流。
 > 配置文件也从 `.bedrock_agentcore.yaml` 迁移到 `agentcore/agentcore.json`。
@@ -415,41 +410,45 @@ aws iam put-role-policy \
 使用 `agentcore create` 创建项目脚手架：
 
 ```bash
-agentcore create --name billingmcpserver --protocol MCP --build Container
-cd billingmcpserver
+agentcore create --project-name billing --name mcpserver --protocol MCP --build Container
+cd mcpserver
 ```
 
-该命令会创建项目目录 `billingmcpserver/`，结构如下：
+该命令会创建项目目录 `billing/`，结构如下：
 
 ```
-billingmcpserver/
+billing/
+  AGENTS.md
+  README.md
   agentcore/
     agentcore.json        # 项目和 agent 配置
     aws-targets.json      # AWS 账号和区域目标
     .env.local            # 本地环境变量（已 gitignore）
   app/
-    billingmcpserver/
+    mcpserver/
+      Dockerfile
+      README.md
       main.py             # 脚手架生成的入口文件（将被替换）
       pyproject.toml      # Python 依赖
-  README.md
+      uv.lock
 ```
 
-将 MCP Server 源码放入 `app/billingmcpserver/`（即 `codeLocation` 指向的目录）：
+将 MCP Server 源码放入 `app/mcpserver/`（即 `codeLocation` 指向的目录）：
 
 ```bash
 # 清理脚手架生成的默认文件
-rm -rf app/billingmcpserver/*
+rm -rf app/mcpserver/*
 
 # 将 MCP Server 源码完整复制进来（排除 .git 和 .venv）
 rsync -av --exclude='.git' --exclude='.venv' \
   ../billing-cost-management-mcp-server-for-amazon-quick/ \
-  app/billingmcpserver/
+  app/mcpserver/
 ```
 
-最终 `app/billingmcpserver/` 目录结构应为：
+最终 `app/mcpserver/` 目录结构应为：
 
 ```
-app/billingmcpserver/
+app/mcpserver/
   awslabs/
     billing_cost_management_mcp_server/
       server.py
@@ -472,13 +471,16 @@ app/billingmcpserver/
   "version": 1,
   "runtimes": [
     {
-      "name": "mcp",
+      "name": "mcpserver",
       "build": "Container",
       "entrypoint": "awslabs/billing_cost_management_mcp_server/server.py",
-      "codeLocation": "app/billingmcpserver/",
+      "codeLocation": "app/mcpserver/",
       "dockerfile": "Dockerfile",
       "runtimeVersion": "PYTHON_3_14",
       "networkMode": "PUBLIC",
+      "instrumentation": {
+        "enableOtel": false
+      },
       "protocol": "MCP",
       "executionRoleArn": "<粘贴 ${EXECUTION_ROLE_ARN} 的实际值>",
       "authorizerType": "CUSTOM_JWT",
@@ -585,7 +587,7 @@ curl -X POST "${MCP_ENDPOINT}" \
 
 ---
 
-## 8. 接入 Amazon Quick Chat Agent
+## 7. 接入 Amazon Quick Chat Agent
 
 ### 步骤 16：构造端点 URL 和认证信息
 
@@ -607,21 +609,21 @@ echo "========================================="
 ### 步骤 17：在 Amazon Quick 控制台创建 MCP Actions 集成
 
 1. 登录 [Amazon Quick 控制台](https://quicksight.aws.amazon.com/)（需要 Author Pro 角色）
-2. 左侧导航栏 → Connections → Integrations → Actions 标签页
-3. 在 "Model Context Protocol" 卡片上点击 "+"
-4. 填写集成信息：
+2. 左侧导航栏 → **Connectors**
+3. 选择 **Create for your team** 标签页
+4. 找到并选择 **Model Context Protocol (MCP)**
+5. 在 Create Integration 页面填写：
    - Name: 自定义名称
+   - Description（可选）: 集成用途描述
    - MCP server endpoint: 步骤 16 输出的 `MCP_SERVER_ENDPOINT`
-5. 点击 "Next"
-6. 认证方式选择 "Service authentication"，填写：
+6. 点击 "Next"
+7. 认证方式选择 **Service authentication (Service-to-Service)**，填写：
    - Client ID: `${QS_M2M_CLIENT_ID}`
    - Client Secret: `${QS_M2M_CLIENT_SECRET}`
    - Token URL: `${TOKEN_URL}`
-7. 点击 "Create and continue"
-8. 等待工具发现完成（约 1-2 分钟），确认能看到 25 个 Actions
-9. 点击 "Next"，可选共享给其他用户，点击 "Done"
-
-> 注意：Service authentication 不需要 Authorization URL 和 Redirect URL，配置比 User Auth 更简单。
+8. 点击 "Create and continue"
+9. 等待工具发现完成，确认能看到 25 个 Actions
+10. 点击 "Next"，可选共享给其他用户
 
 ### 步骤 18：在 Chat Agent 中使用
 
@@ -643,7 +645,7 @@ echo "========================================="
 
 ---
 
-## 9. 日常运维
+## 8. 日常运维
 
 ```bash
 # 查看部署状态
@@ -670,7 +672,7 @@ agentcore deploy -y
 
 ---
 
-## 10. 故障排查
+## 9. 故障排查
 
 | 问题 | 原因和解决方法 |
 |------|---------------|
@@ -692,7 +694,7 @@ agentcore deploy -y
 
 ---
 
-## 11. 参考文档
+## 10. 参考文档
 
 - [billing-cost-management-mcp-server 上游源码](https://github.com/awslabs/mcp/tree/main/src/billing-cost-management-mcp-server)
 - [源码修改指南](./source-modification-guide.md)
