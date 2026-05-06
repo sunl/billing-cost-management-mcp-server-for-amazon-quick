@@ -94,14 +94,10 @@ python3.14 --version
 
 # 安装 uv（Python 包管理器，AgentCore CLI 依赖它管理 Python 项目）
 curl -LsSf https://astral.sh/uv/install.sh | sh
-source $HOME/.local/bin/env
+uv --version
 
 # 安装新版 AgentCore CLI（npm 包）
 npm install -g @aws/agentcore
-
-# 验证安装
-node --version
-uv --version
 agentcore --help
 ```
 
