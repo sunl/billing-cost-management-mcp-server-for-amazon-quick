@@ -161,7 +161,7 @@ aws iam create-role \
   --description "Cross-account role for Billing MCP Server"
 ```
 
-权限策略（与 deployment-guide.md 步骤 6 中的 `billing-mcp-policy.json` 相同）：
+权限策略（与 README.md 步骤 6 中的 `billing-mcp-policy.json` 相同）：
 
 创建命令：
 
