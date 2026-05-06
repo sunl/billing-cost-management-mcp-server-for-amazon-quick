@@ -115,7 +115,7 @@ git clone https://github.com/sunl/billing-cost-management-mcp-server-for-amazon-
 cd billing-cost-management-mcp-server-for-amazon-quick
 
 # 安装 Python 依赖
-python3 -m venv .venv
+python3.14 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -e .
@@ -408,8 +408,11 @@ aws iam put-role-policy \
 使用 `agentcore create` 创建项目脚手架：
 
 ```bash
+# 如果当前在billing-cost-management-mcp-server-for-amazon-quick目录则先回到上一级目录
+cd ..
+
 agentcore create --project-name billing --name mcpserver --protocol MCP --build Container
-cd mcpserver
+cd billing
 ```
 
 该命令会创建项目目录 `billing/`，结构如下：
@@ -513,7 +516,7 @@ echo "Region: ${AWS_REGION}"
   {
     "name": "default",
     "account": "<你的 AWS_ACCOUNT_ID>",
-    "region": "us-east-1"
+    "region": "<你的 AWS_REGION>"
   }
 ]
 ```
@@ -527,10 +530,10 @@ echo "Region: ${AWS_REGION}"
 
 ### 步骤 14：部署
 
-使用 `--dry-run` 预览部署变更（可选）：
+使用 `--dry-run` 预览部署变更，如果CDK之前没有bootstrap过，需要加上--yes参数（可选）：
 
 ```bash
-agentcore deploy --dry-run
+agentcore deploy --dry-run --yes
 ```
 
 确认无误后执行部署：
@@ -576,11 +579,13 @@ curl -X POST "${MCP_ENDPOINT}" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
 ```
 
-预期返回包含 `serverInfo`、25 个工具和 2 个 prompts 的 JSON 响应。
+预期返回如下JSON 响应：
+```
+data: {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","capabilities":{"experimental":{},"prompts":{"listChanged":true},"resources":{"subscribe":false,"listChanged":true},"tools":{"listChanged":true}},"serverInfo":{"name":"billing-cost-management-mcp","version":"2.14.1"},"instructions":"AWS Billing and Cost Management MCP Server - Provides AWS cost optimization tools and prompts through MCP.\n\nWhen using these tools, always:\n1. Use UnblendedCost metric by default\n2. Exclude Credits and Refunds by default\n3. Be concise and focus on essential information first\n4. For optimization queries, focus on top 2-3 highest impact recommendations\n\nAvailable components:\n\nTOOLS:\n- cost-explorer: Historical cost and usage data with flexible filtering\n- compute-optimizer: Performance optimization recommendations to identify under provisioned AWS compute resources like EC2, Lambda, ASG, RDS, ECS\n- cost-optimization: Cost optimization recommendations across AWS services\n- storage-lens: Query S3 Storage Lens metrics data using Athena SQL\n- athena-cur: Query Cost and Usage Report data through Athena\n- pricing: Access AWS service pricing information\n- bcm-pricing-calc: Work with workload estimates from AWS Billing and Cost Management Pricing Calculator\n- budget: Retrieve AWS budget information\n- cost-anomaly: Identify cost anomalies in AWS accounts\n- cost-comparison: Compare costs between time periods\n- free-tier-usage: Monitor AWS Free Tier usage\n- rec-details: Get enhanced cost optimization recommendations\n- ri-performance: Analyze Reserved Instance coverage and utilization\n- sp-performance: Analyze Savings Plans coverage and utilization\n- session-sql: Execute SQL queries on the session database\n- billing-conductor: AWS Billing Conductor tools for AWS Proforma billing (billing groups and associated accounts and cost reports, pricing rules/plans, custom line items)\n\nPROMPTS:\n- savings_plans: Analyzes AWS usage and identifies opportunities for Savings Plans purchases\n- graviton_migration: Analyzes EC2 instances and identifies opportunities to migrate to AWS Graviton processors\n\nFor financial analysis:\n1. Start with a high-level view of costs using cost-explorer with SERVICE dimension\n2. Look for cost optimization opportunities with compute-optimizer or cost-optimization\n3. For S3-specific optimizations, use storage-lens\n4. For budget monitoring, use the budget tool\n5. For anomaly detection, use the cost-anomaly tool\n\nFor optimization recommendations:\n1. Use cost-optimization to get recommendations for cost optimization across services. This includes including Idle resources, Rightsizing for savings, RI/SP.\n2. Use rec-details for enhanced recommendation analysis for specific cost optimization recommendations.\n3. Use compute-optimizer to get performance optimization recommendations for compute resources such as EC2, ECS, EBS, Lambda, RDS, ASG.\n4. Use ri-performance and sp-performance to analyze purchase programs\n\nFor multi-account environments:\n- Include the LINKED_ACCOUNT dimension in cost_explorer queries\n- Specify accountIds parameter for compute-optimizer and cost-optimization tools\n"}}
+```
 
 > 注意：
 > - 必须先发 `initialize` 请求完成 MCP 协议握手，直接发 `tools/list` 会返回错误
-> - `agentcore invoke` 可能因跳过 initialize 握手而报 400，不影响正常 MCP 客户端使用
 > - Token 有效期默认 1 小时，过期后重新执行获取 Token 的命令
 
 ---
@@ -604,7 +609,7 @@ echo "Token URL:       ${TOKEN_URL}"
 echo "========================================="
 ```
 
-### 步骤 17：在 Amazon Quick 控制台创建 MCP Actions 集成
+### 步骤 17：在 Amazon Quick 控制台创建 MCP Connector 集成
 
 1. 登录 [Amazon Quick 控制台](https://quicksight.aws.amazon.com/)（需要 Author Pro 角色）
 2. 左侧导航栏 → **Connectors**
@@ -615,18 +620,35 @@ echo "========================================="
    - Description（可选）: 集成用途描述
    - MCP server endpoint: 步骤 16 输出的 `MCP_SERVER_ENDPOINT`
 6. 点击 "Next"
-7. 认证方式选择 **Service authentication (Service-to-Service)**，填写：
+7. 认证方式选择 **Service authentication**，填写：
    - Client ID: `${QS_M2M_CLIENT_ID}`
    - Client Secret: `${QS_M2M_CLIENT_SECRET}`
    - Token URL: `${TOKEN_URL}`
 8. 点击 "Create and continue"
-9. 等待工具发现完成，确认能看到 25 个 Actions
-10. 点击 "Next"，可选共享给其他用户
+9. Review actions for Model Context Protocol一开始只有listTools的Action，点击"Next"
+10. 先不共享给其他用户，点击 "Publish"
+
+成功之后再查看该MCP，可以看到25个Actions都已经被发现
+![billing_mcp](./docs/billing-mcp.jpg)
+
 
 ### 步骤 18：在 Chat Agent 中使用
 
-在 Amazon Quick 控制台打开 Chat Agents，选择 "My Assistant" 或自定义 Agent，输入自然语言提问：
+在 Amazon Quick 控制台打开 Chat Agents，创建 Custom Chat Agent 并绑定 Billing MCP
 
+1. 登录 Amazon Quick 控制台
+2. 左侧导航栏 → **Chat agents** → **Create chat agent**
+3. 在 **Agent Creator** 中可以选 **Skip** 直接进入 builder 模式
+4. 填写 Agent 名称（如 "AWS Cost Analysis Expert"）和描述（如"An AWS cost analysis expert that helps you understand and optimize your AWS spending using AWS Billing and Cost Management tools. Provides detailed cost breakdowns, trends, and recommendations."）
+5. 在 **AGENT PERSONA** 中配置角色和提示词，例如：
+   > "You are an AWS Cost Analysis Expert with deep expertise in AWS Billing and Cost Management. Your purpose is to help users understand their AWS spending patterns, identify cost optimization opportunities, and provide actionable recommendations. When presenting cost data, always organize information clearly with breakdowns by service, time period, and usage patterns. Highlight unusual spending spikes or trends that warrant attention. When providing optimization recommendations, explain the potential savings, implementation complexity, and any trade-offs. Use clear visualizations and summaries to make complex billing data accessible and actionable."
+6. 在 **Actions** 部分选择 **Link**，选中步骤 17 创建的 Billing MCP Connector，
+   勾选需要暴露给 Agent 的 actions（25 个 billing tools）
+7. 点击 **Update preview** 然后**Launch chat agent** 发布
+
+![AWS Cost Analysis Expert](./docs/billing-mcp-custom-agent.jpg)
+
+使用自然语言提问，如果跳出Requesting Action review，点击Allow同意进行操作：
 ```
 帮我查看上个月的 AWS 总费用，按服务分组显示
 我的 AWS 账户有哪些成本异常？
@@ -635,6 +657,8 @@ echo "========================================="
 有哪些 EC2 实例可以进行成本优化？
 分析我的 Reserved Instance 覆盖率
 ```
+
+![Query Result](./docs/billing-mcp-query.jpg)
 
 > 注意事项：
 > - MCP 操作有 60 秒超时限制
