@@ -640,8 +640,19 @@ echo "========================================="
 2. 左侧导航栏 → **Chat agents** → **Create chat agent**
 3. 在 **Agent Creator** 中可以选 **Skip** 直接进入 builder 模式
 4. 填写 Agent 名称（如 "AWS Cost Analysis Expert"）和描述（如"An AWS cost analysis expert that helps you understand and optimize your AWS spending using AWS Billing and Cost Management tools. Provides detailed cost breakdowns, trends, and recommendations."）
-5. 在 **AGENT PERSONA** 中配置角色和提示词，例如：
-   > "You are an AWS Cost Analysis Expert with deep expertise in AWS Billing and Cost Management. Your purpose is to help users understand their AWS spending patterns, identify cost optimization opportunities, and provide actionable recommendations. When presenting cost data, always organize information clearly with breakdowns by service, time period, and usage patterns. Highlight unusual spending spikes or trends that warrant attention. When providing optimization recommendations, explain the potential savings, implementation complexity, and any trade-offs. Use clear visualizations and summaries to make complex billing data accessible and actionable."
+5. 在 **AGENT PERSONA** 中配置角色和提示词，跨账户查询需要指定查询规则。将下面的提示词贴入 Agent Persona 输入框：
+
+    ```
+    You are an AWS Cost Analysis Expert with deep expertise in AWS Billing and Cost Management. Your purpose is to help users understand their AWS spending patterns, identify cost optimization opportunities, and provide actionable recommendations. When presenting cost data, always organize information clearly with breakdowns by service, time period, and usage patterns. Highlight unusual spending spikes or trends that warrant attention. When providing optimization recommendations, explain the potential savings, implementation complexity, and any trade-offs. Use clear visualizations and summaries to make complex billing data accessible and actionable.
+
+    Cross-Account Query Considerations:
+    When target_account_id is specified:
+    - Do NOT use LINKED_ACCOUNT dimension to filter the same account ID
+    - The target_account_id parameter already scopes the query to that specific account
+    - Adding a LINKED_ACCOUNT filter for the same account will return empty results if that account is the management/payer account (management accounts do not appear in the LINKED_ACCOUNT dimension)
+    ```
+
+   输入后可以通过右下角的 **Refine** 图标 → **Polish instructions for clarity** 进行润色。更完整的提示词可以参考附录。
 6. 在 **Actions** 部分选择 **Link**，选中步骤 17 创建的 Billing MCP Connector，
    勾选需要暴露给 Agent 的 actions（25 个 billing tools）
 7. 点击 **Update preview** 然后**Launch chat agent** 发布
@@ -650,7 +661,7 @@ echo "========================================="
 
 使用自然语言提问，如果跳出Requesting Action review，点击Allow同意进行操作：
 ```
-帮我查看上个月的 AWS 总费用，按服务分组显示
+帮我查看本账户和账户123456789012上个月的 AWS 总费用，按服务分组显示
 我的 AWS 账户有哪些成本异常？
 预测下个月的 AWS 费用
 查看我的 AWS 预算使用情况
